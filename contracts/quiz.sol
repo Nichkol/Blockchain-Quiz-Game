@@ -1,49 +1,61 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract QuizToken {
-    string public name = "QuizToken";
-    string public symbol = "QUIZ";
-    uint8 public decimals = 18;
-    uint256 public totalSupply;
+contract QuizGame {
+    // Mapping of players to their scores
+    mapping (address => uint256) public playerScores;
 
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
+    // Mapping of questions to their correct answers and options
+    struct Question {
+        string question;
+        string[] options;
+        uint256 correctOption;
+        uint256 reward;
+    }
+    mapping (uint256 => Question) public questions;
 
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
+    // Token contract address
+    address public tokenContract;
 
-    constructor(uint256 _initialSupply) {
-        totalSupply = _initialSupply * 10 ** uint256(decimals);
-        balanceOf[msg.sender] = totalSupply;
-        emit Transfer(address(0), msg.sender, totalSupply);
+    // Event emitted when a player answers a question correctly
+    event CorrectAnswer(address player, uint256 questionId, uint256 reward);
+
+    // Event emitted when a player answers a question incorrectly
+    event IncorrectAnswer(address player, uint256 questionId);
+
+    // Constructor function
+    constructor(address _tokenContract) {
+        tokenContract = _tokenContract;
     }
 
-    function transfer(address _to, uint256 _value) public returns (bool success) {
-        require(_to != address(0), "Invalid address");
-        require(balanceOf[msg.sender] >= _value, "Insufficient balance");
-
-        balanceOf[msg.sender] -= _value;
-        balanceOf[_to] += _value;
-        emit Transfer(msg.sender, _to, _value);
-        return true;
+    // Function to add a new question to the game
+    function addQuestion(uint256 questionId, string memory question, string[] memory options, uint256 correctOption, uint256 reward) public {
+        questions[questionId] = Question(question, options, correctOption, reward);
     }
 
-    function approve(address _spender, uint256 _value) public returns (bool success) {
-        allowance[msg.sender][_spender] = _value;
-        emit Approval(msg.sender, _spender, _value);
-        return true;
+    // Function to submit an answer to a question
+    function submitAnswer(uint256 questionId, uint256 answer) public {
+        // Get the question details
+        Question storage question = questions[questionId];
+
+        // Check if the answer is correct
+        if (answer == question.correctOption) {
+            // Transfer reward tokens to the player
+            (bool success, ) = tokenContract.call(
+                abi.encodeWithSignature("transfer(address,uint256)", msg.sender, question.reward)
+            );
+            require(success, "Token transfer failed");
+
+            // Update the player's score
+            playerScores[msg.sender] += question.reward;
+            emit CorrectAnswer(msg.sender, questionId, question.reward);
+        } else {
+            emit IncorrectAnswer(msg.sender, questionId);
+        }
     }
 
-    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {
-        require(_to != address(0), "Invalid address");
-        require(balanceOf[_from] >= _value, "Insufficient balance");
-        require(allowance[_from][msg.sender] >= _value, "Allowance exceeded");
-
-        balanceOf[_from] -= _value;
-        balanceOf[_to] += _value;
-        allowance[_from][msg.sender] -= _value;
-        emit Transfer(_from, _to, _value);
-        return true;
+    // Function to get a player's score
+    function getPlayerScore(address player) public view returns (uint256) {
+        return playerScores[player];
     }
 }
